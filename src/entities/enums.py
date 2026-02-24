@@ -25,3 +25,21 @@ class AuditAction(str, enum.Enum):
     DELETE = "DELETE"
     APPROVE = "APPROVE"
     REJECT = "REJECT"
+
+class MessageStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+class AuditEntityType(str, enum.Enum):
+    PROJECT = "PROJECT"
+    TRANSLATION_FILE = "TRANSLATION_FILE"
+    MESSAGE = "MESSAGE"
+    TRANSLATION_VERSION = "TRANSLATION_VERSION"
+    PROJECT_MEMBER = "PROJECT_MEMBER"
+class Priority (str, enum.Enum):
+    TOP = "TOP"
+    MEDIUM = "MEDIUM" 
+    HIGH = "HIGH" 
+    NORMAL = "NORMAL"   
+    
