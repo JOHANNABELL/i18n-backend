@@ -1,9 +1,9 @@
 from uuid import UUID
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 from ..entities.project import Project
 from ..entities.projectMember import ProjectMember
-from ..entities.enums import ProjectRole
+from ..entities.auditLog import AuditLog
+from ..entities.enums import ProjectRole, AuditAction, AuditEntityType
 from ..exceptions import (
     ProjectAlreadyExistsException,
     ProjectNotFoundException,
@@ -13,112 +13,175 @@ from .models import ProjectCreate, ProjectUpdate
 
 
 class ProjectService:
-    """Service for project management with RBAC and validation"""
+    """Service for managing projects"""
 
     @staticmethod
     def create_project(
         db: Session,
+        organization_id: UUID,
         user_id: UUID,
-        org_id: UUID,
-        project_data: ProjectCreate,
+        data: ProjectCreate,
     ) -> Project:
-        """Create a new project. User must be OWNER or ADMIN in organization."""
-        # Check if project with same name already exists in this org
-        existing = db.query(Project).filter(
-            and_(
-                Project.organization_id == org_id,
-                Project.name == project_data.name,
-            )
+        """Create a new project - creator becomes ADMIN"""
+        # Check if project with same name already exists in org
+        existing = db.query(Project).filter_by(
+            organization_id=organization_id, name=data.name
         ).first()
         if existing:
-            raise ProjectAlreadyExistsException(project_data.name)
+            raise ProjectAlreadyExistsException(data.name)
 
-        # Create project
         project = Project(
-            organization_id=org_id,
+            organization_id=organization_id,
             created_by=user_id,
-            name=project_data.name,
-            description=project_data.description,
-            source_language=project_data.source_language,
-            target_languages=",".join(project_data.target_languages),
+            name=data.name,
+            description=data.description,
+            source_language=data.source_language,
+            target_languages=",".join(data.target_languages),
         )
         db.add(project)
         db.flush()
 
-        # Add creator as LEAD member
+        # Add creator as ADMIN member
         member = ProjectMember(
             project_id=project.id,
             user_id=user_id,
-            role=ProjectRole.LEAD,
+            role=ProjectRole.ADMIN,
         )
         db.add(member)
+        db.flush()
+
+        # Audit log for project creation
+        audit = AuditLog(
+            user_id=user_id,
+            project_id=project.id,
+            action=AuditAction.CREATE,
+            entity_type=AuditEntityType.PROJECT,
+            entity_id=project.id,
+            details={
+                "name": data.name,
+                "source_language": data.source_language,
+                "target_languages": data.target_languages,
+            },
+        )
+        db.add(audit)
         db.commit()
-        db.refresh(project)
         return project
 
     @staticmethod
     def get_project(db: Session, project_id: UUID) -> Project:
-        """Get project by ID"""
-        project = db.query(Project).filter(Project.id == project_id).first()
+        """Get a project by ID"""
+        project = db.query(Project).filter_by(id=project_id).first()
         if not project:
             raise ProjectNotFoundException(project_id)
         return project
 
     @staticmethod
+    def list_projects(db: Session, organization_id: UUID) -> list:
+        """List all projects in an organization"""
+        return db.query(Project).filter_by(organization_id=organization_id).all()
+
+    @staticmethod
+    def list_user_projects(db: Session, user_id: UUID) -> list:
+        """List all projects a user is a member of"""
+        members = db.query(ProjectMember).filter_by(user_id=user_id).all()
+        project_ids = [m.project_id for m in members]
+        if not project_ids:
+            return []
+        return db.query(Project).filter(Project.id.in_(project_ids)).all()
+
+    @staticmethod
     def update_project(
         db: Session,
-        user_id: UUID,
         project_id: UUID,
-        project_data: ProjectUpdate,
+        user_id: UUID,
+        data: ProjectUpdate,
     ) -> Project:
-        """Update project. Only LEAD members can update."""
-        project = ProjectService.get_project(db, project_id)
+        """Update a project - RBAC: ADMIN only"""
+        project = db.query(Project).filter_by(id=project_id).first()
+        if not project:
+            raise ProjectNotFoundException(project_id)
 
-        # Check RBAC - user must be LEAD
-        member = db.query(ProjectMember).filter(
-            and_(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user_id,
-            )
+        # Check member permissions - ADMIN only
+        member = db.query(ProjectMember).filter_by(
+            project_id=project_id, user_id=user_id
         ).first()
-        if not member or member.role != ProjectRole.LEAD:
-            raise UnauthorizedException("Only LEAD members can update project")
+        if not member or member.role != ProjectRole.ADMIN:
+            raise UnauthorizedException("Only ADMIN can update projects")
 
-        # Update fields
-        if project_data.name is not None:
-            project.name = project_data.name
-        if project_data.description is not None:
-            project.description = project_data.description
-        if project_data.target_languages is not None:
-            project.target_languages = ",".join(project_data.target_languages)
+        if data.name:
+            project.name = data.name
+        if data.description is not None:
+            project.description = data.description
+        if data.target_languages:
+            project.target_languages = ",".join(data.target_languages)
 
+        project.updated_at = None
+        db.flush()
+
+        audit = AuditLog(
+            user_id=user_id,
+            project_id=project_id,
+            action=AuditAction.UPDATE,
+            entity_type=AuditEntityType.PROJECT,
+            entity_id=project_id,
+            details={
+                "name": project.name,
+                "target_languages": project.target_languages,
+            },
+        )
+        db.add(audit)
         db.commit()
-        db.refresh(project)
         return project
 
     @staticmethod
-    def list_projects(db: Session, org_id: UUID) -> list[Project]:
-        """List all projects in an organization"""
-        return db.query(Project).filter(Project.organization_id == org_id).all()
+    def delete_project(db: Session, project_id: UUID, user_id: UUID) -> None:
+        """Delete a project - RBAC: ADMIN only"""
+        project = db.query(Project).filter_by(id=project_id).first()
+        if not project:
+            raise ProjectNotFoundException(project_id)
+
+        # Check member permissions - ADMIN only
+        member = db.query(ProjectMember).filter_by(
+            project_id=project_id, user_id=user_id
+        ).first()
+        if not member or member.role != ProjectRole.ADMIN:
+            raise UnauthorizedException("Only ADMIN can delete projects")
+
+        project_id_to_log = project.id
+        db.delete(project)
+        db.flush()
+
+        audit = AuditLog(
+            user_id=user_id,
+            project_id=project_id_to_log,
+            action=AuditAction.DELETE,
+            entity_type=AuditEntityType.PROJECT,
+            entity_id=project_id_to_log,
+            details={"name": project.name},
+        )
+        db.add(audit)
+        db.commit()
 
     @staticmethod
-    def delete_project(
-        db: Session,
-        user_id: UUID,
-        project_id: UUID,
-    ) -> None:
-        """Delete project. Only LEAD members can delete."""
-        project = ProjectService.get_project(db, project_id)
+    def get_project_stats(db: Session, project_id: UUID) -> dict:
+        """Get statistics about a project"""
+        project = db.query(Project).filter_by(id=project_id).first()
+        if not project:
+            raise ProjectNotFoundException(project_id)
 
-        # Check RBAC - user must be LEAD
-        member = db.query(ProjectMember).filter(
-            and_(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user_id,
-            )
-        ).first()
-        if not member or member.role != ProjectRole.LEAD:
-            raise UnauthorizedException("Only LEAD members can delete project")
+        from ..entities.translationFile import TranslationFile
+        from ..entities.message import Message
 
-        db.delete(project)
-        db.commit()
+        file_count = db.query(TranslationFile).filter_by(project_id=project_id).count()
+        total_messages = db.query(Message).join(TranslationFile).filter(
+            TranslationFile.project_id == project_id
+        ).count()
+        member_count = db.query(ProjectMember).filter_by(project_id=project_id).count()
+
+        return {
+            "project_id": project_id,
+            "name": project.name,
+            "files": file_count,
+            "total_messages": total_messages,
+            "members": member_count,
+        }
