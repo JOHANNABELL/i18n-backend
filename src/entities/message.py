@@ -14,7 +14,7 @@ class Message(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    file_id = Column(UUID(as_uuid=True), ForeignKey("translation_files.id", ondelete="CASCADE"), nullable=False)
+    file_id = Column(UUID(as_uuid=True), ForeignKey("translation_files.id", ondelete="CASCADE"), nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     key = Column(String, nullable=False)

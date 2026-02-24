@@ -33,3 +33,9 @@ class ExportResponse(BaseModel):
     version: int
     messages: Dict[str, str] = Field(description="Dictionary of approved messages")
     exported_at: datetime
+
+class TranslationFileUpdate(BaseModel):
+    language_code: str
+    language_name : str
+    messages: Dict[str, str] = Field(description="Dictionary of approved messages")
+     

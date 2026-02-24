@@ -10,7 +10,7 @@ from src.translationFile.controller import router as translation_file_router
 from src.message.controller import router as message_router
 
 def register_routes(app: FastAPI):
-    app.include_router(todos_router)
+    # app.include_router(todos_router)
     app.include_router(auth_router)
     app.include_router(users_router)
     app.include_router(org_router)

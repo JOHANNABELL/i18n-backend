@@ -37,3 +37,9 @@ class AuditEntityType(str, enum.Enum):
     MESSAGE = "MESSAGE"
     TRANSLATION_VERSION = "TRANSLATION_VERSION"
     PROJECT_MEMBER = "PROJECT_MEMBER"
+class Priority (str, enum.Enum):
+    TOP = "TOP"
+    MEDIUM = "MEDIUM" 
+    HIGH = "HIGH" 
+    NORMAL = "NORMAL"   
+    
