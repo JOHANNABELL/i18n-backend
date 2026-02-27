@@ -1,7 +1,8 @@
 from uuid import UUID
 import json
+import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 from ..entities.message import Message
 from ..entities.translationFile import TranslationFile
 from ..entities.translationVersion import TranslationVersion
@@ -18,6 +19,9 @@ from ..exceptions import (
 from .models import MessageCreate, MessageUpdate
 
 
+logger = logging.getLogger(__name__)
+
+
 class MessageService:
     """Service for managing translation messages with atomic workflows"""
 
@@ -30,6 +34,8 @@ class MessageService:
         project_id: UUID,
     ) -> Message:
         """Create a new message - RBAC: EDITOR or higher"""
+        logger.debug(f"Creating message with key '{data.key}' in file {file_id}")
+        
         # Check member permissions
         member = db.query(ProjectMember).filter_by(
             project_id=project_id, user_id=user_id
@@ -64,6 +70,8 @@ class MessageService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(message)
+        logger.info(f"Message created with id: {message.id}")
         return message
 
     @staticmethod
@@ -75,6 +83,8 @@ class MessageService:
         project_id: UUID,
     ) -> Message:
         """Update a message value - RBAC: EDITOR or higher"""
+        logger.debug(f"Updating message {message_id}")
+        
         message = db.query(Message).filter_by(id=message_id).first()
         if not message:
             raise MessageNotFoundException(message_id)
@@ -91,7 +101,7 @@ class MessageService:
         try:
             message.value = data.value
             message.comment = data.comment
-            message.updated_at = None  # Will use DB default
+            message.updated_at = datetime.now(timezone.utc)
             db.flush()
 
             # Create audit log
@@ -140,10 +150,13 @@ class MessageService:
             )
             db.add(version_audit)
             db.commit()
+            db.refresh(message)
+            logger.info(f"Message {message_id} updated with version {file.current_version}")
 
             return message
         except Exception as e:
             db.rollback()
+            logger.error(f"Error updating message {message_id}: {str(e)}")
             raise
 
     @staticmethod
@@ -154,6 +167,8 @@ class MessageService:
         project_id: UUID,
     ) -> Message:
         """Approve a pending message - RBAC: LEAD or ADMIN only"""
+        logger.debug(f"Approving message {message_id}")
+        
         message = db.query(Message).filter_by(id=message_id).first()
         if not message:
             raise MessageNotFoundException(message_id)
@@ -182,6 +197,8 @@ class MessageService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(message)
+        logger.info(f"Message {message_id} approved")
         return message
 
     @staticmethod
@@ -193,6 +210,8 @@ class MessageService:
         reason: str = None,
     ) -> Message:
         """Reject a pending message - RBAC: LEAD or ADMIN only"""
+        logger.debug(f"Rejecting message {message_id}")
+        
         message = db.query(Message).filter_by(id=message_id).first()
         if not message:
             raise MessageNotFoundException(message_id)
@@ -221,11 +240,15 @@ class MessageService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(message)
+        logger.info(f"Message {message_id} rejected")
         return message
 
     @staticmethod
     def get_message(db: Session, message_id: UUID) -> Message:
         """Get a single message"""
+        logger.debug(f"Fetching message {message_id}")
+        
         message = db.query(Message).filter_by(id=message_id).first()
         if not message:
             raise MessageNotFoundException(message_id)
@@ -234,6 +257,8 @@ class MessageService:
     @staticmethod
     def list_messages(db: Session, file_id: UUID, status: str = None) -> list:
         """List all messages in a file, optionally filtered by status"""
+        logger.debug(f"Listing messages for file {file_id} with status filter: {status}")
+        
         query = db.query(Message).filter_by(file_id=file_id)
         if status:
             query = query.filter_by(status=MessageStatus[status])
@@ -242,6 +267,8 @@ class MessageService:
     @staticmethod
     def delete_message(db: Session, message_id: UUID, user_id: UUID, project_id: UUID) -> None:
         """Delete a message - RBAC: ADMIN only"""
+        logger.debug(f"Deleting message {message_id}")
+        
         message = db.query(Message).filter_by(id=message_id).first()
         if not message:
             raise MessageNotFoundException(message_id)
@@ -267,3 +294,4 @@ class MessageService:
         )
         db.add(audit)
         db.commit()
+        logger.info(f"Message {message_id} deleted")

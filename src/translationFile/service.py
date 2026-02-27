@@ -1,9 +1,12 @@
 from uuid import UUID
+import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 from ..entities.translationFile import TranslationFile
 from ..entities.projectMember import ProjectMember
 from ..entities.project import Project
+from ..entities.message import Message
+from ..entities.translationVersion import TranslationVersion
 from ..entities.auditLog import AuditLog
 from ..entities.enums import ProjectRole, AuditAction, AuditEntityType
 from ..exceptions import (
@@ -13,6 +16,9 @@ from ..exceptions import (
     UnauthorizedException,
 )
 from .models import TranslationFileCreate, TranslationFileUpdate
+
+
+logger = logging.getLogger(__name__)
 
 
 class TranslationFileService:
@@ -26,6 +32,8 @@ class TranslationFileService:
         data: TranslationFileCreate,
     ) -> TranslationFile:
         """Create a new translation file - RBAC: EDITOR or higher"""
+        logger.debug(f"Creating translation file for language {data.language_code} in project {project_id}")
+        
         # Check member permissions
         member = db.query(ProjectMember).filter_by(
             project_id=project_id, user_id=user_id
@@ -67,11 +75,15 @@ class TranslationFileService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(file)
+        logger.info(f"Translation file created with id: {file.id}")
         return file
 
     @staticmethod
     def get_file(db: Session, file_id: UUID) -> TranslationFile:
         """Get a translation file by ID"""
+        logger.debug(f"Fetching translation file {file_id}")
+        
         file = db.query(TranslationFile).filter_by(id=file_id).first()
         if not file:
             raise FileNotFoundException(file_id)
@@ -80,6 +92,8 @@ class TranslationFileService:
     @staticmethod
     def list_files(db: Session, project_id: UUID) -> list:
         """List all translation files in a project"""
+        logger.debug(f"Listing translation files for project {project_id}")
+        
         return db.query(TranslationFile).filter_by(project_id=project_id).all()
 
     @staticmethod
@@ -91,6 +105,8 @@ class TranslationFileService:
         data: TranslationFileUpdate,
     ) -> TranslationFile:
         """Update a translation file - RBAC: EDITOR or higher"""
+        logger.debug(f"Updating translation file {file_id}")
+        
         file = db.query(TranslationFile).filter_by(id=file_id).first()
         if not file:
             raise FileNotFoundException(file_id)
@@ -104,7 +120,7 @@ class TranslationFileService:
 
         if data.language_name:
             file.language_name = data.language_name
-        file.updated_at = None
+        file.updated_at = datetime.now(timezone.utc)
         db.flush()
 
         audit = AuditLog(
@@ -117,11 +133,15 @@ class TranslationFileService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(file)
+        logger.info(f"Translation file {file_id} updated")
         return file
 
     @staticmethod
     def delete_file(db: Session, file_id: UUID, user_id: UUID, project_id: UUID) -> None:
         """Delete a translation file - RBAC: ADMIN only"""
+        logger.debug(f"Deleting translation file {file_id}")
+        
         file = db.query(TranslationFile).filter_by(id=file_id).first()
         if not file:
             raise FileNotFoundException(file_id)
@@ -134,6 +154,7 @@ class TranslationFileService:
             raise UnauthorizedException("Only ADMIN can delete files")
 
         file_id_to_log = file.id
+        language_code = file.language_code
         db.delete(file)
         db.flush()
 
@@ -143,22 +164,26 @@ class TranslationFileService:
             action=AuditAction.DELETE,
             entity_type=AuditEntityType.TRANSLATION_FILE,
             entity_id=file_id_to_log,
-            details={"language_code": file.language_code},
+            details={"language_code": language_code},
         )
         db.add(audit)
         db.commit()
+        logger.info(f"Translation file {file_id} deleted")
 
     @staticmethod
     def export_file(db: Session, file_id: UUID) -> dict:
         """Export file as JSON with all messages"""
+        logger.debug(f"Exporting translation file {file_id}")
+        
         file = db.query(TranslationFile).filter_by(id=file_id).first()
         if not file:
             raise FileNotFoundException(file_id)
 
         messages = db.query(Message).filter_by(file_id=file_id).all()
-        return {
+        export_data = {
             "language_code": file.language_code,
             "language_name": file.language_name,
+            "version": file.current_version,
             "messages": [
                 {
                     "key": m.key,
@@ -168,11 +193,16 @@ class TranslationFileService:
                 }
                 for m in messages
             ],
+            "exported_at": datetime.now(timezone.utc),
         }
+        logger.info(f"Translation file {file_id} exported with {len(messages)} messages")
+        return export_data
 
     @staticmethod
     def get_version_history(db: Session, file_id: UUID) -> list:
         """Get all versions of a translation file"""
+        logger.debug(f"Fetching version history for file {file_id}")
+        
         file = db.query(TranslationFile).filter_by(id=file_id).first()
         if not file:
             raise FileNotFoundException(file_id)

@@ -1,6 +1,7 @@
 from uuid import UUID
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+import logging
 from ..entities.projectMember import ProjectMember
 from ..entities.auditLog import AuditLog
 from ..entities.enums import ProjectRole, AuditAction, AuditEntityType
@@ -8,8 +9,12 @@ from ..exceptions import (
     MemberAlreadyExistsException,
     CannotRemoveLastLeadException,
     UnauthorizedException,
+    MemberNotFoundException,
 )
 from .models import ProjectMemberCreate, ProjectMemberUpdate
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectMemberService:
@@ -24,6 +29,8 @@ class ProjectMemberService:
         data: ProjectMemberCreate,
     ) -> ProjectMember:
         """Add a member to a project - RBAC: ADMIN only"""
+        logger.debug(f"Adding member {data.user_id} to project {project_id}")
+        
         # Check if member already exists
         existing = db.query(ProjectMember).filter_by(
             project_id=project_id, user_id=data.user_id
@@ -56,19 +63,23 @@ class ProjectMemberService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(member)
+        logger.info(f"Member {data.user_id} added to project {project_id}")
         return member
 
     @staticmethod
     def get_member(db: Session, member_id: UUID) -> ProjectMember:
         """Get a project member by ID"""
+        logger.debug(f"Fetching member {member_id}")
         member = db.query(ProjectMember).filter_by(id=member_id).first()
         if not member:
-            return None
+            raise MemberNotFoundException(member_id)
         return member
 
     @staticmethod
     def list_members(db: Session, project_id: UUID) -> list:
         """List all members in a project"""
+        logger.debug(f"Listing members for project {project_id}")
         return db.query(ProjectMember).filter_by(project_id=project_id).all()
 
     @staticmethod
@@ -80,9 +91,11 @@ class ProjectMemberService:
         data: ProjectMemberUpdate,
     ) -> ProjectMember:
         """Update a member's role - RBAC: ADMIN only"""
+        logger.debug(f"Updating member {member_id} role to {data.role}")
+        
         member = db.query(ProjectMember).filter_by(id=member_id).first()
         if not member:
-            return None
+            raise MemberNotFoundException(member_id)
 
         # Check updater permissions - ADMIN only
         updater_member = db.query(ProjectMember).filter_by(
@@ -93,7 +106,7 @@ class ProjectMemberService:
 
         old_role = member.role
         member.role = data.role
-        member.updated_at = None
+        member.updated_at = datetime.now(timezone.utc)
         db.flush()
 
         audit = AuditLog(
@@ -110,14 +123,18 @@ class ProjectMemberService:
         )
         db.add(audit)
         db.commit()
+        db.refresh(member)
+        logger.info(f"Member {member_id} role updated to {data.role}")
         return member
 
     @staticmethod
     def remove_member(db: Session, member_id: UUID, project_id: UUID, removed_by: UUID) -> None:
         """Remove a member from a project - RBAC: ADMIN only"""
+        logger.debug(f"Removing member {member_id} from project {project_id}")
+        
         member = db.query(ProjectMember).filter_by(id=member_id).first()
         if not member:
-            return
+            raise MemberNotFoundException(member_id)
 
         # Check remover permissions - ADMIN only
         remover_member = db.query(ProjectMember).filter_by(
@@ -149,10 +166,12 @@ class ProjectMemberService:
         )
         db.add(audit)
         db.commit()
+        logger.info(f"Member {member_id} removed from project {project_id}")
 
     @staticmethod
     def get_user_role_in_project(db: Session, project_id: UUID, user_id: UUID) -> ProjectRole:
         """Get a user's role in a project"""
+        logger.debug(f"Fetching user {user_id} role in project {project_id}")
         member = db.query(ProjectMember).filter_by(
             project_id=project_id, user_id=user_id
         ).first()

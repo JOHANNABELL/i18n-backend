@@ -5,6 +5,7 @@ from datetime import datetime
 
 
 class ProjectCreate(BaseModel):
+    """DTO for creating a project"""
     name: str = Field(..., min_length=1, max_length=255, description="Project name")
     description: Optional[str] = Field(None, max_length=1000, description="Project description")
     source_language: str = Field(..., min_length=2, max_length=10, description="Source language code (e.g., 'en')")
@@ -12,6 +13,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
+    """DTO for updating a project"""
     name: Optional[str] = Field(None, min_length=1, max_length=255, description="Project name")
     description: Optional[str] = Field(None, max_length=1000, description="Project description")
     source_language: Optional[str] = Field(None, min_length=2, max_length=10, description="Source language code")
@@ -19,6 +21,7 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectResponse(BaseModel):
+    """Response model for projects"""
     id: UUID
     name: str
     description: Optional[str]
@@ -31,3 +34,12 @@ class ProjectResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ProjectStatsResponse(BaseModel):
+    """Response model for project statistics"""
+    project_id: UUID
+    name: str
+    files: int
+    total_messages: int
+    members: int
