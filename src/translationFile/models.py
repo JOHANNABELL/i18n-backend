@@ -16,7 +16,7 @@ class TranslationFileUpdate(BaseModel):
 
 
 class TranslationFileResponse(BaseModel):
-    """Response model for translation files"""
+    """Basic response model for translation files"""
     id: UUID
     project_id: UUID
     created_by: Optional[UUID]
@@ -25,6 +25,32 @@ class TranslationFileResponse(BaseModel):
     current_version: int
     created_at: datetime
     updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class MessageInfo(BaseModel):
+    """Message info for translation files"""
+    id: UUID
+    file_id: UUID
+    key: str
+    value: Optional[str]
+    created_by: Optional[UUID]
+    reviewed_by: Optional[UUID]
+
+
+class TranslationFileDetailedResponse(BaseModel):
+    """Detailed response with messages for translation files"""
+    id: UUID
+    project_id: UUID
+    created_by: Optional[UUID]
+    language_code: str
+    language_name: str
+    current_version: int
+    created_at: datetime
+    updated_at: Optional[datetime]
+    messages: List[MessageInfo] = []  # List of messages in file
 
     class Config:
         from_attributes = True

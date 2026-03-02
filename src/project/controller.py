@@ -9,7 +9,7 @@ from ..exceptions import (
     UnauthorizedException,
 )
 from .service import ProjectService
-from .models import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectStatsResponse
+from .models import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectStatsResponse, ProjectDetailedResponse
 from typing import List
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -43,6 +43,17 @@ def get_project(project_id: UUID, db: DbSession):
         raise HTTPException(status_code=500, detail="Failed to fetch project")
 
 
+@router.get("/{project_id}/detailed", response_model=ProjectDetailedResponse)
+def get_project_detailed(project_id: UUID, db: DbSession):
+    """Get a project with members details"""
+    try:
+        return ProjectService.get_project_detailed(db, project_id)
+    except ProjectNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch project")
+
+
 @router.get("", response_model=List[ProjectResponse])
 def list_projects(
     organization_id: UUID,
@@ -55,6 +66,18 @@ def list_projects(
         raise HTTPException(status_code=500, detail="Failed to list projects")
 
 
+@router.get("/organization/{organization_id}/detailed", response_model=List[ProjectDetailedResponse])
+def list_projects_detailed(
+    organization_id: UUID,
+    db: DbSession,
+):
+    """List all projects in organization with members details"""
+    try:
+        return ProjectService.list_projects_detailed(db, organization_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to list projects")
+
+
 @router.get("/user/projects", response_model=List[ProjectResponse])
 def list_user_projects(
     db: DbSession,
@@ -63,6 +86,18 @@ def list_user_projects(
     """List all projects for current user"""
     try:
         return ProjectService.list_user_projects(db, current_user.id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to list user projects")
+
+
+@router.get("/user/projects/detailed", response_model=List[ProjectDetailedResponse])
+def list_user_projects_detailed(
+    db: DbSession,
+    current_user: CurrentUser,
+):
+    """List all projects for current user with members details"""
+    try:
+        return ProjectService.list_user_projects_detailed(db, current_user.id)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to list user projects")
 

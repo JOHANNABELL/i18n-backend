@@ -5,7 +5,37 @@ from datetime import datetime, timezone
 import logging
 
 from src.entities.organization import Organization
+from src.entities.organizationMember import OrganizationMember
+from src.entities.user import User
 from . import models
+
+
+def _build_organization_detailed(db: Session, org: Organization) -> dict:
+    """Build detailed organization response with members"""
+    members_data = []
+    
+    # Get all organization members
+    members = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org.id
+    ).all()
+    
+    for member in members:
+        user = db.query(User).filter(User.id == member.user_id).first()
+        if user:
+            members_data.append({
+                "id": user.id,
+                "name": user.name,
+                "email": user.email
+            })
+    
+    return {
+        "id": org.id,
+        "name": org.name,
+        "description": org.description,
+        "created_at": org.created_at,
+        "created_by": org.created_by,
+        "members": members_data
+    }
 
 
 # Fonction backend des organisations 
@@ -135,3 +165,29 @@ def get_organizations_by_user (db: Session, user_id:UUID):
         raise Exception ("Organization not found")
 
     return org
+
+
+def get_organization_detailed(db: Session, org_id: UUID) -> dict:
+    """Get organization with members details"""
+    logging.debug(f"Fetching detailed organization by ID: {org_id}")
+    
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    
+    if not org:
+        logging.warning(f"Organization not found: {org_id}")
+        raise Exception("Organization not found")
+    
+    return _build_organization_detailed(db, org)
+
+
+def get_organization_detailed_by_user(db: Session, user_id: UUID) -> list:
+    """Get all organizations for user with members details"""
+    logging.debug(f"Fetching detailed organizations for user: {user_id}")
+    
+    orgs = db.query(Organization).filter(Organization.created_by == user_id).all()
+    
+    if not orgs:
+        logging.warning(f"No organizations found for user: {user_id}")
+        return []
+    
+    return [_build_organization_detailed(db, org) for org in orgs]

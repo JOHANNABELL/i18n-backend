@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
@@ -20,8 +20,15 @@ class ProjectUpdate(BaseModel):
     target_languages: Optional[List[str]] = Field(None, min_items=1, description="List of target language codes")
 
 
+class ProjectMemberInfo(BaseModel):
+    """Member info for projects"""
+    id: UUID
+    name: str
+    email: EmailStr
+
+
 class ProjectResponse(BaseModel):
-    """Response model for projects"""
+    """Basic response model for projects"""
     id: UUID
     name: str
     description: Optional[str]
@@ -31,6 +38,23 @@ class ProjectResponse(BaseModel):
     target_languages: List[str]
     created_at: datetime
     updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectDetailedResponse(BaseModel):
+    """Detailed response with members for projects"""
+    id: UUID
+    name: str
+    description: Optional[str]
+    organization_id: UUID
+    created_by: Optional[UUID]
+    source_language: str
+    target_languages: List[str]
+    created_at: datetime
+    updated_at: Optional[datetime]
+    members: List[ProjectMemberInfo] = []  # List of users from project_member
 
     class Config:
         from_attributes = True

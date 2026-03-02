@@ -8,7 +8,7 @@ from ..entities.project import Project
 from ..entities.message import Message
 from ..entities.translationVersion import TranslationVersion
 from ..entities.auditLog import AuditLog
-from ..entities.enums import ProjectRole, AuditAction, AuditEntityType
+from ..entities.enums import ProjectRole, AuditAction, AuditEntityType, MessageStatus
 from ..exceptions import (
     FileAlreadyExistsException,
     FileNotFoundException,
@@ -19,6 +19,38 @@ from .models import TranslationFileCreate, TranslationFileUpdate
 
 
 logger = logging.getLogger(__name__)
+
+
+def _build_translation_file_detailed(db: Session, file: TranslationFile) -> dict:
+    """Build detailed translation file response with messages"""
+    messages_data = []
+    
+    # Get all messages in file
+    messages = db.query(Message).filter(
+        Message.file_id == file.id
+    ).all()
+    
+    for message in messages:
+        messages_data.append({
+            "id": message.id,
+            "file_id": message.file_id,
+            "key": message.key,
+            "value": message.value,
+            "created_by": message.created_by,
+            "reviewed_by": message.reviewed_by
+        })
+    
+    return {
+        "id": file.id,
+        "project_id": file.project_id,
+        "created_by": file.created_by,
+        "language_code": file.language_code,
+        "language_name": file.language_name,
+        "current_version": file.current_version,
+        "created_at": file.created_at,
+        "updated_at": file.updated_at,
+        "messages": messages_data
+    }
 
 
 class TranslationFileService:
@@ -207,3 +239,22 @@ class TranslationFileService:
         if not file:
             raise FileNotFoundException(file_id)
         return db.query(TranslationVersion).filter_by(file_id=file_id).all()
+
+    @staticmethod
+    def get_file_detailed(db: Session, file_id: UUID) -> dict:
+        """Get translation file with messages details"""
+        logger.debug(f"Fetching detailed translation file {file_id}")
+        
+        file = db.query(TranslationFile).filter_by(id=file_id).first()
+        if not file:
+            raise FileNotFoundException(file_id)
+        
+        return _build_translation_file_detailed(db, file)
+
+    @staticmethod
+    def list_files_detailed(db: Session, project_id: UUID) -> list:
+        """List all translation files in project with messages details"""
+        logger.debug(f"Listing detailed translation files for project {project_id}")
+        
+        files = db.query(TranslationFile).filter_by(project_id=project_id).all()
+        return [_build_translation_file_detailed(db, file) for file in files]

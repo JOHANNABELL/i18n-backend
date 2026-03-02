@@ -50,6 +50,13 @@ def get_organization(org_id: UUID, db: DbSession):
     return service.get_organization_by_id(db, org_id)
 
 
+# READ by ID with members
+@router.get("/{org_id}/detailed", response_model=models.OrganizationDetailedResponse)
+def get_organization_detailed(org_id: UUID, db: DbSession):
+    """Get organization with all members details"""
+    return service.get_organization_detailed(db, org_id)
+
+
 # READ by name
 @router.get("/by-name/{name}", response_model=models.OrganizationResponse)
 def get_by_name(name: str, db: DbSession):
@@ -60,3 +67,10 @@ def get_by_name(name: str, db: DbSession):
 @router.get("/user/{user_id}", response_model=List[models.OrganizationResponse])
 def get_by_user(user_id: UUID, db: DbSession):
     return service.get_organizations_by_user(db, user_id)
+
+
+# READ by user with members
+@router.get("/user/{user_id}/detailed", response_model=List[models.OrganizationDetailedResponse])
+def get_by_user_detailed(user_id: UUID, db: DbSession):
+    """Get all organizations for user with members details"""
+    return service.get_organization_detailed_by_user(db, user_id)

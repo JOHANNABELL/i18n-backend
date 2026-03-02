@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 import logging
 from ..entities.project import Project
 from ..entities.projectMember import ProjectMember
+from ..entities.user import User
 from ..entities.auditLog import AuditLog
 from ..entities.enums import ProjectRole, AuditAction, AuditEntityType
 from ..exceptions import (
@@ -15,6 +16,38 @@ from .models import ProjectCreate, ProjectUpdate
 
 
 logger = logging.getLogger(__name__)
+
+
+def _build_project_detailed(db: Session, project: Project) -> dict:
+    """Build detailed project response with members"""
+    members_data = []
+    
+    # Get all project members
+    members = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project.id
+    ).all()
+    
+    for member in members:
+        user = db.query(User).filter(User.id == member.user_id).first()
+        if user:
+            members_data.append({
+                "id": user.id,
+                "name": user.name,
+                "email": user.email
+            })
+    
+    return {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "organization_id": project.organization_id,
+        "created_by": project.created_by,
+        "source_language": project.source_language,
+        "target_languages": project.target_languages.split(",") if project.target_languages else [],
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+        "members": members_data
+    }
 
 
 class ProjectService:
@@ -208,3 +241,34 @@ class ProjectService:
             "total_messages": total_messages,
             "members": member_count,
         }
+
+    @staticmethod
+    def get_project_detailed(db: Session, project_id: UUID) -> dict:
+        """Get project with members details"""
+        logger.debug(f"Fetching detailed project {project_id}")
+        
+        project = db.query(Project).filter_by(id=project_id).first()
+        if not project:
+            raise ProjectNotFoundException(project_id)
+        
+        return _build_project_detailed(db, project)
+
+    @staticmethod
+    def list_projects_detailed(db: Session, organization_id: UUID) -> list:
+        """List all projects in organization with members details"""
+        logger.debug(f"Listing detailed projects for organization {organization_id}")
+        
+        projects = db.query(Project).filter_by(organization_id=organization_id).all()
+        return [_build_project_detailed(db, project) for project in projects]
+
+    @staticmethod
+    def list_user_projects_detailed(db: Session, user_id: UUID) -> list:
+        """List all projects for user with members details"""
+        logger.debug(f"Listing detailed projects for user {user_id}")
+        
+        members = db.query(ProjectMember).filter_by(user_id=user_id).all()
+        project_ids = [m.project_id for m in members]
+        if not project_ids:
+            return []
+        projects = db.query(Project).filter(Project.id.in_(project_ids)).all()
+        return [_build_project_detailed(db, project) for project in projects]

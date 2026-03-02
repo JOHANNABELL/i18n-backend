@@ -9,7 +9,7 @@ from ..exceptions import (
     UnauthorizedException,
 )
 from .service import TranslationFileService
-from .models import TranslationFileCreate, TranslationFileUpdate, TranslationFileResponse, ExportResponse
+from .models import TranslationFileCreate, TranslationFileUpdate, TranslationFileResponse, ExportResponse, TranslationFileDetailedResponse
 from typing import List
 
 router = APIRouter(prefix="/projects/{project_id}/files", tags=["translation-files"])
@@ -48,6 +48,18 @@ def list_files(
         raise HTTPException(status_code=500, detail="Failed to list translation files")
 
 
+@router.get("/detailed", response_model=List[TranslationFileDetailedResponse])
+def list_files_detailed(
+    project_id: UUID,
+    db: DbSession,
+):
+    """List all translation files in a project with messages details"""
+    try:
+        return TranslationFileService.list_files_detailed(db, project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to list translation files")
+
+
 @router.get("/{file_id}", response_model=TranslationFileResponse)
 def get_file(
     project_id: UUID,
@@ -60,6 +72,24 @@ def get_file(
         if file.project_id != project_id:
             raise HTTPException(status_code=404, detail="File not found in this project")
         return file
+    except FileNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch translation file")
+
+
+@router.get("/{file_id}/detailed", response_model=TranslationFileDetailedResponse)
+def get_file_detailed(
+    project_id: UUID,
+    file_id: UUID,
+    db: DbSession,
+):
+    """Get a translation file with messages details"""
+    try:
+        file_data = TranslationFileService.get_file_detailed(db, file_id)
+        if file_data["project_id"] != project_id:
+            raise HTTPException(status_code=404, detail="File not found in this project")
+        return file_data
     except FileNotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
