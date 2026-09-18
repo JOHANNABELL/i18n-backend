@@ -3,7 +3,7 @@
 ## Quick Start
 
 ### 1. Database is Ready
-The Neon PostgreSQL database has been initialized with all required tables, enums, and constraints via `scripts/create_schema.sql`.
+The PostgreSQL database has been initialized with all required tables, enums, and constraints via `scripts/create_schema.sql`.
 
 ### 2. API Endpoints Overview
 
