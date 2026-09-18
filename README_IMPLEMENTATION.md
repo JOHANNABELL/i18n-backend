@@ -40,7 +40,7 @@ This FastAPI-based internationalization (i18n) backend has been fully implemente
 ## Quick Start
 
 ### 1. Database is Ready
-The Neon PostgreSQL database has been initialized:
+Initialize the PostgreSQL database.
 ```bash
 # Schema already created via scripts/create_schema.sql
 ```
